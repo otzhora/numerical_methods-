@@ -2,3 +2,4 @@ latex/
 .vscode
 .ipynb_checkpoints
 .idea
+__pycache__
