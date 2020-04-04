@@ -12,8 +12,6 @@ def call_counter(func):
 def get_log_error(x, y, axis=1):
     x = np.array(x)
     y = np.array(y)
-    print(f"x: {x}", f"y: {y}")
-    print(x - y)
     if len(x.shape) == 1:
         return np.log10(np.abs(x - y))
     else:
