@@ -1,14 +1,11 @@
 import numpy as np
+
+from scipy.special import comb
 from scipy import integrate
+
+import inspect
+
 MAXITER = 12
-
-
-def c_nk(n: int, k: int):
-    """
-    Compute binomial coefficient 
-    """
-    assert n >= k and k >= 0, f"n must be >= k and k must be >= 0"
-    return np.math.factorial(n) / (np.math.factorial(k) * np.math.factorial(n - k))
 
 
 def moments(max_s: int, xl: float, xr: float, a: float = 0.0, b: float = 1.0, alpha: float = 0.0, beta: float = 0.0):
@@ -31,15 +28,24 @@ def moments(max_s: int, xl: float, xr: float, a: float = 0.0, b: float = 1.0, al
 
     mu = np.zeros(max_s + 1)
 
-    if alpha == 0:
-        for j in range(max_s + 1):
-            mu[j] = -sum([(-1) ** (k+1) * c_nk(j, k) * b ** (j - k) * (a - b)
-                          ** (k - beta + 1) / (k - beta + 1) for k in range(j + 1)])
+    '''
+    for j in range(len(mu)):
+        if alpha == 0:
+            def f(x): return x ** j / (b - x) ** beta
+            #mu[j] = integrate.quad(f, xl, xr)[0]
+            mu[j] = -sum([comb(j, k) * (b ** k) * ((xr - b) ** (j - k - beta+1) - (xl - b)
+                                                   ** (j - k - beta + 1) / (j - k - beta + 1)) for k in range(j + 1)])
 
-    if beta == 0:
-        for j in range(max_s + 1):
-            mu[j] = sum([c_nk(j, k) * a ** (j - k) * (b - a) **
-                         (k - alpha + 1) / (k - alpha + 1) for k in range(j + 1)])
+        if beta == 0:
+            def f(x): return x ** j / (x - a) ** alpha
+            #mu[j] = integrate.quad(f, xl, xr)[0]
+            mu[j] = sum([comb(j, k) * (a ** k) * ((xr - a) ** (j - k - beta + 1) - (xl - b)
+                                                  ** (j - k - beta + 1)) / (j - k - beta + 1) for k in range(j + 1)])
+    '''
+    def p(x):
+        return 1 / (x - a) ** alpha / (b - x) ** beta
+    mu = [integrate.quad(lambda x: p(x) * x ** j, xl, xr)[0]
+          for j in range(max_s + 1)]
 
     return mu
 
@@ -54,12 +60,13 @@ def quad(f, xl: float, xr: float, nodes, *params):
     *params: parameters of the variant — a, b, alpha, beta)
     """
     mu = moments(len(nodes) - 1, xl, xr, *params)
+    n = len(nodes)
 
-    X = np.array([[nodes[j]**s for j in range(len(nodes))]
-                  for s in range(len(nodes))])
+    X = [[nodes[i] ** s for i in range(n)] for s in range(n)]
     A = np.linalg.solve(X, mu)
 
-    return sum([A[j] * f(nodes[j]) for j in range(len(nodes))])
+    return [f(nodes[i]) for i in range(len(nodes))] @ A
+    # return # small formula result over [xl, xr]
 
 
 def quad_gauss(f, xl: float, xr: float, n: int, *params):
@@ -73,7 +80,18 @@ def quad_gauss(f, xl: float, xr: float, n: int, *params):
     """
     mu = np.array(moments(2 * n - 1, xl, xr, *params))
 
-    raise NotImplementedError
+    X = np.array([[mu[j + s] for j in range(n)] for s in range(n)])
+
+    coefs = np.linalg.solve(X, [-mu[n + s] for s in range(n)])
+    coefs = coefs[::-1]
+    coefs = np.concatenate([1., coefs], axis=None)
+
+    nodes = np.roots(coefs)
+
+    X = [[nodes[i] ** s for i in range(n)] for s in range(n)]
+    A = np.linalg.solve(X, mu[:n])
+
+    return [f(nodes[i]) for i in range(len(nodes))] @ A
     # return # small formula result over [xl, xr]
 
 
@@ -114,7 +132,8 @@ def equidist(n: int, xl: float, xr: float):
 
 def runge(s1: float, s2: float, L: float, m: float):
     """ estimate m-degree error for s2 """
-    raise NotImplementedError
+    return abs(s2 - s1) / (L ** m - 1)
+    # return abs((s2 - s1) / (1 - L ** (-m)))
 
 
 def aitken(s1: float, s2: float, s3: float, L: float):
@@ -125,7 +144,7 @@ def aitken(s1: float, s2: float, s3: float, L: float):
     """
     # if NON MONOTONOUS CONVERGENCE
     #    return -1
-    raise NotImplementedError
+    return -np.log(abs(s3 - s2) / abs(s2 - s1)) / np.log(L)
 
 
 def doubling_nc(f, xl: float, xr: float, n: int, tol: float, *params):
@@ -144,13 +163,22 @@ def doubling_nc(f, xl: float, xr: float, n: int, tol: float, *params):
     # err : estimated error of S
     # iter : number of iterations (steps doubling)
     iter = 0
+    N = 8
 
-    if iter == MAXITER:
-        print("Convergence not reached!")
-        return 0, 0, 10*tol
+    s1 = composite_quad(f, xl, xr, N, n, *params)
+    s2 = composite_quad(f, xl, xr, 2 * N, n, *params)
 
-    raise NotImplementedError
-    return N, S, err
+    while iter < MAXITER:
+        err = runge(s1, s2, 2, 3)
+        if err <= tol:
+            return 2 * N, s2, err
+
+        N *= 2
+        s1 = s2
+        s2 = composite_quad(f, xl, xr, 2 * N, n, *params)
+        iter += 1
+    print("Convergence not reached!")
+    return 0, 0, 10*tol
 
 
 def doubling_nc_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
@@ -170,13 +198,29 @@ def doubling_nc_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
     # m : estimated convergence rate by Aitken for S
     # iter : number of iterations (steps doubling)
     iter = 0
+    N = 8
 
-    if iter == MAXITER:
-        print("Convergence not reached!")
-        return 0, 0, 10*tol, -100
+    s1 = composite_quad(f, xl, xr, N, n, *params)
+    s2 = composite_quad(f, xl, xr, 2 * N, n, *params)
+    s3 = composite_quad(f, xl, xr, 4 * N, n, *params)
 
-    raise NotImplementedError
-    return N, S, err, m
+    m = aitken(s1, s2, s3, 2)
+    while iter < MAXITER:
+        err = runge(s1, s2, 2, m)
+        if err <= tol:
+            return 2 * N, s2, err, m
+
+        N *= 2
+
+        s1 = s2
+        s2 = s3
+        s3 = composite_quad(f, xl, xr, 4 * N, n, *params)
+
+        m = aitken(s1, s2, s3, 2)
+        iter += 1
+
+    print("Convergence not reached!")
+    return 0, 0, 10*tol, 0
 
 
 def doubling_gauss(f, xl: float, xr: float, n: int, tol: float, *params):
@@ -195,13 +239,22 @@ def doubling_gauss(f, xl: float, xr: float, n: int, tol: float, *params):
     # err : estimated error of S
     # iter : number of iterations (steps doubling)
     iter = 0
+    N = 8
 
-    if iter == MAXITER:
-        print("Convergence not reached!")
-        return 0, 0, 10*tol
+    s1 = composite_gauss(f, xl, xr, N, n, *params)
+    s2 = composite_gauss(f, xl, xr, 2 * N, n, *params)
 
-    raise NotImplementedError
-    return N, S, err
+    while iter < MAXITER:
+        err = runge(s1, s2, 2, 3)
+        if err <= tol:
+            return 2 * N, s2, err
+
+        N *= 2
+        s1 = s2
+        s2 = composite_gauss(f, xl, xr, 2 * N, n, *params)
+
+    print("Convergence not reached!")
+    return 0, 0, 10*tol
 
 
 def doubling_gauss_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
@@ -221,13 +274,30 @@ def doubling_gauss_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
     # m : estimated convergence rate by Aitken for S
     # iter : number of iterations (steps doubling)
     iter = 0
+    N = 8
 
-    if iter == MAXITER:
-        print("Convergence not reached!")
-        return 0, 0, 10*tol, -100
+    s1 = composite_gauss(f, xl, xr, N, n, *params)
+    s2 = composite_gauss(f, xl, xr, 2 * N, n, *params)
+    s3 = composite_gauss(f, xl, xr, 4 * N, n, *params)
 
-    raise NotImplementedError
-    return N, S, err, m
+    m = aitken(s1, s2, s3, 2)
+    while iter < MAXITER:
+        err = runge(s1, s2, 2, m)
+        if s3 - s2 > 0 or s2 - s1 > 0:
+            print("convergence not reached yet", f"err: {err}")
+        if err <= tol:
+            return 2 * N, s2, err, m
+
+        N *= 2
+
+        s1 = s2
+        s2 = s3
+        s3 = composite_gauss(f, xl, xr, 4 * N, n, *params)
+
+        m = aitken(s1, s2, s3, 2)
+
+    print("Convergence not reached!")
+    return 0, 0, 10*tol, 0
 
 
 def optimal_nc(f, xl: float, xr: float, n: int, tol: float, *params):
@@ -244,10 +314,23 @@ def optimal_nc(f, xl: float, xr: float, n: int, tol: float, *params):
     # N : number of steps for S
     # err : estimated error of S
     # iter : number of iterations (steps doubling)
-    iter = 0
+    N = 4
 
-    if iter == MAXITER:
-        print("Convergence not reached!")
-        return 0, 0, 10 * tol
-    raise NotImplementedError
-    return N, S, err
+    s1 = composite_quad(f, xl, xr, N, n, *params)
+    s2 = composite_quad(f, xl, xr, N * 2, n, *params)
+    s3 = composite_quad(f, xl, xr, N * 4, n, *params)
+    m = aitken(s1, s2, s3, 2)
+
+    h = (xr - xl) / N * 2
+    R = runge(s2, s3, 2, m)
+    hopt = np.sqrt(tol / R)
+
+    N = int(np.ceil((xr - xl) / hopt))
+    print(type(N))
+    s1 = composite_quad(f, xl, xr, N, n, *params)
+    s2 = composite_quad(f, xl, xr, N * 2, n, *params)
+    s3 = composite_quad(f, xl, xr, N * 4, n, *params)
+
+    m = aitken(s1, s2, s3, 2)
+    err = runge(s1, s2, 2, m)
+    return N, s2, err

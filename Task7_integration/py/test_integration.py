@@ -8,7 +8,7 @@ from Task7_integration.py.integration import (quad, moments, quad_gauss, composi
                                               equidist, runge, aitken, optimal_nc, doubling_nc, doubling_nc_aitken,
                                               doubling_gauss, doubling_gauss_aitken)
 
-variant = 1
+variant = 5
 MAXITER = 12
 # Содержание
 #
@@ -17,7 +17,7 @@ MAXITER = 12
 # 1.b. Применение для формулы с конкретным весом, стемящимся к бесконечности в a или в b.
 #
 # 2. Проверка АСТ формулы типа Гаусса с числом узлов от 1 до 3:
-# 2.a. При менение для формулы с единичным весом;
+# 2.a. Применение для формулы с единичным весом;
 # 2.b. Применение для формулы с конкретным весом, стемящимся к бесконечности в a или в b.
 #
 # 3. Проверка сходимости СКФ Ньютона — Котса с тремя узлами половинным делением:
@@ -59,7 +59,6 @@ def test_nc_degree():
         # S = [quad(f, a, b, a + (b - a) * np.random.random(n)) for n in n_range]
         # считаем точную погрешность
         accuracy = get_log_error(S, J * np.ones_like(S))
-        print(accuracy)
         # если погрешность 0, то выводим точность в 17 знаков
         accuracy[np.isinf(accuracy)] = -17
 
@@ -129,7 +128,7 @@ def test_gauss_degree():
         accuracy = get_log_error(S, J * np.ones_like(S))
         # если погрешность 0, то выводим точность в 17 знаков
         accuracy[np.isinf(accuracy)] = -17
-
+        print(accuracy, s)
         # check accuracy is good enough
         for n, acc in zip(n_range, accuracy):
             if s <= 2 * n - 1:  # АСТ должно быть равно 2n-1
