@@ -28,25 +28,24 @@ def moments(max_s: int, xl: float, xr: float, a: float = 0.0, b: float = 1.0, al
 
     mu = np.zeros(max_s + 1)
 
-    '''
-    for j in range(len(mu)):
-        if alpha == 0:
-            def f(x): return x ** j / (b - x) ** beta
-            #mu[j] = integrate.quad(f, xl, xr)[0]
-            mu[j] = -sum([comb(j, k) * (b ** k) * ((xr - b) ** (j - k - beta+1) - (xl - b)
-                                                   ** (j - k - beta + 1) / (j - k - beta + 1)) for k in range(j + 1)])
-
+    for j in range(max_s + 1):
         if beta == 0:
-            def f(x): return x ** j / (x - a) ** alpha
-            #mu[j] = integrate.quad(f, xl, xr)[0]
-            mu[j] = sum([comb(j, k) * (a ** k) * ((xr - a) ** (j - k - beta + 1) - (xl - b)
-                                                  ** (j - k - beta + 1)) / (j - k - beta + 1) for k in range(j + 1)])
-    '''
-    def p(x):
-        return 1 / (x - a) ** alpha / (b - x) ** beta
-    mu = [integrate.quad(lambda x: p(x) * x ** j, xl, xr)[0]
-          for j in range(max_s + 1)]
+            coefs = np.array([comb(j, i) * a ** i / (j - i - alpha + 1)
+                              for i in range(j + 1)])
+            r = np.array([(xr - a) ** (j - i - alpha + 1)
+                          for i in range(j + 1)])
+            l = np.array([(xl - a) ** (j - i - alpha + 1)
+                          for i in range(j + 1)])
 
+        if alpha == 0:
+            coefs = np.array([(-1) ** (j-i) * comb(j, i) * b ** i / (j - i - beta + 1)
+                              for i in range(j + 1)])
+            r = np.array([(b - xl) ** (j - i - beta + 1)
+                          for i in range(j + 1)])
+            l = np.array([(b - xr) ** (j - i - beta + 1)
+                          for i in range(j + 1)])
+
+        mu[j] = sum(coefs * (r - l))
     return mu
 
 
@@ -66,7 +65,6 @@ def quad(f, xl: float, xr: float, nodes, *params):
     A = np.linalg.solve(X, mu)
 
     return [f(nodes[i]) for i in range(len(nodes))] @ A
-    # return # small formula result over [xl, xr]
 
 
 def quad_gauss(f, xl: float, xr: float, n: int, *params):
@@ -92,7 +90,6 @@ def quad_gauss(f, xl: float, xr: float, n: int, *params):
     A = np.linalg.solve(X, mu[:n])
 
     return [f(nodes[i]) for i in range(len(nodes))] @ A
-    # return # small formula result over [xl, xr]
 
 
 def composite_quad(f, xl: float, xr: float, N: int, n: int, *params):
@@ -142,8 +139,7 @@ def aitken(s1: float, s2: float, s3: float, L: float):
     s1, s2, s3: consecutive composite quads
     return: convergence order estimation
     """
-    # if NON MONOTONOUS CONVERGENCE
-    #    return -1
+
     return -np.log(abs(s3 - s2) / abs(s2 - s1)) / np.log(L)
 
 
@@ -157,11 +153,7 @@ def doubling_nc(f, xl: float, xr: float, n: int, tol: float, *params):
     tol : error tolerance
     *params : arguments to pass to composite_quad function
     """
-    # required local variables to return
-    # S : computed value of the integral with required tolerance
-    # N : number of steps for S
-    # err : estimated error of S
-    # iter : number of iterations (steps doubling)
+
     iter = 0
     N = 8
 
@@ -191,12 +183,7 @@ def doubling_nc_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
     tol : error tolerance
     *params : arguments to pass to composite_quad function
     """
-    # required local variables to return
-    # S : computed value of the integral with required tolerance
-    # N : number of steps for S
-    # err : estimated error of S
-    # m : estimated convergence rate by Aitken for S
-    # iter : number of iterations (steps doubling)
+
     iter = 0
     N = 8
 
@@ -233,11 +220,7 @@ def doubling_gauss(f, xl: float, xr: float, n: int, tol: float, *params):
     tol : error tolerance
     *params : arguments to pass to composite_quad function
     """
-    # required local variables to return
-    # S : computed value of the integral with required tolerance
-    # N : number of steps for S
-    # err : estimated error of S
-    # iter : number of iterations (steps doubling)
+
     iter = 0
     N = 8
 
@@ -267,12 +250,7 @@ def doubling_gauss_aitken(f, xl: float, xr: float, n: int, tol: float, *params):
     tol : error tolerance
     *params : arguments to pass to composite_quad function
     """
-    # required local variables to return
-    # S : computed value of the integral with required tolerance
-    # N : number of steps for S
-    # err : estimated error of S
-    # m : estimated convergence rate by Aitken for S
-    # iter : number of iterations (steps doubling)
+
     iter = 0
     N = 8
 
@@ -309,11 +287,7 @@ def optimal_nc(f, xl: float, xr: float, n: int, tol: float, *params):
     tol : error tolerance
     *params : arguments to pass to composite_quad function
     """
-    # required local variables to return
-    # S : computed value of the integral with required tolerance
-    # N : number of steps for S
-    # err : estimated error of S
-    # iter : number of iterations (steps doubling)
+
     N = 4
 
     s1 = composite_quad(f, xl, xr, N, n, *params)
@@ -321,16 +295,16 @@ def optimal_nc(f, xl: float, xr: float, n: int, tol: float, *params):
     s3 = composite_quad(f, xl, xr, N * 4, n, *params)
     m = aitken(s1, s2, s3, 2)
 
-    h = (xr - xl) / N * 2
+    h = (xr - xl) / N
     R = runge(s2, s3, 2, m)
-    hopt = np.sqrt(tol / R)
-
+    hopt = 0.85 * h * np.sqrt(tol / R)
     N = int(np.ceil((xr - xl) / hopt))
-    print(type(N))
+
     s1 = composite_quad(f, xl, xr, N, n, *params)
     s2 = composite_quad(f, xl, xr, N * 2, n, *params)
     s3 = composite_quad(f, xl, xr, N * 4, n, *params)
 
     m = aitken(s1, s2, s3, 2)
     err = runge(s1, s2, 2, m)
+
     return N, s2, err
