@@ -8,7 +8,7 @@ from Task7_integration.py.integration import (quad, moments, quad_gauss, composi
                                               equidist, runge, aitken, optimal_nc, doubling_nc, doubling_nc_aitken,
                                               doubling_gauss, doubling_gauss_aitken)
 
-variant = 5
+variant = 1
 MAXITER = 12
 # Содержание
 #
